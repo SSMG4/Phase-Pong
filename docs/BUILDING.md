@@ -50,5 +50,5 @@
 
 5. Compile: `emmake make`.
 
-6\. Host the resulting files locally (e.g., `python3 -m http.server`) or push to trigger the GitHub Actions deployment.
+6. Host the resulting files locally (e.g., `python3 -m http.server`) or push to trigger the GitHub Actions deployment.
 

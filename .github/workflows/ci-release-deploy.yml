@@ -9,33 +9,51 @@ on:
 
 permissions:
   contents: read
-  pages: write
+  pages:    write
   id-token: write
 
 jobs:
+  # ── WebAssembly build ──────────────────────────────────────────────────────
   build-wasm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v12
-      - name: Compile Wasm
+      - uses: actions/checkout@v4
+
+      - name: Set up Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v14
+
+      # FIX 1: 'emcmake cmake ..' used to resolve to the repo root which has
+      #         no CMakeLists.txt.  Corrected to point at core_cpp/.
+      # FIX 2: added -j$(nproc) so the build doesn't time out on slow runners.
+      - name: Compile to WebAssembly
         run: |
           mkdir -p build_web
           cd build_web
-          emcmake cmake .. -DCMAKE_BUILD_TYPE=Release -DPLATFORM=Web
-          emmake make
-      - name: Upload Pages Artifact
+          emcmake cmake ../core_cpp \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPLATFORM=Web
+          emmake make -j$(nproc)
+
+      # FIX 3: GitHub Pages serves 'index.html' at the root URL.
+      #         The Emscripten output is 'PhasePong.html', so without this
+      #         rename visitors would receive a 404 at the Pages URL.
+      - name: Prepare Pages root (rename output to index.html)
+        run: cp build_web/PhasePong.html build_web/index.html
+
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: build_web/
 
+  # ── Deploy to GitHub Pages ─────────────────────────────────────────────────
   deploy-pages:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build-wasm
+    # Only deploy on pushes to master, not on pull requests
+    if: github.event_name != 'pull_request'
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

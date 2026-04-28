@@ -7,27 +7,48 @@ on:
     branches: [ "master" ]
 
 jobs:
+  # ── Linux desktop build ────────────────────────────────────────────────────
   build-cpp-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Dependencies
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev mesa-common-dev libx11-dev libxrandr-dev libxi-dev xorg-dev libgl1-mesa-dev libglu1-mesa-dev cmake
-      - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug .
-      - name: Build
-        run: cmake --build build --config Debug
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            libasound2-dev \
+            mesa-common-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxi-dev \
+            xorg-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev
+
+      # FIX: cmake was previously invoked with '.' which resolves to the repo
+      # root.  There is no CMakeLists.txt at the root — it lives in core_cpp/.
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug core_cpp
+
+      - name: Build
+        run: cmake --build build --config Debug -- -j$(nproc)
+
+  # ── Android NDK build ──────────────────────────────────────────────────────
   build-android-ndk:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Fix Gradle Permissions
+
+      - name: Fix Gradle permissions
         run: chmod +x android/gradlew
-      - name: Build Debug APK
+
+      - name: Build debug APK
         run: cd android && ./gradlew assembleDebug

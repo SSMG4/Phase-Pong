@@ -1,54 +1,117 @@
-# Build Instructions
+# Phase Pong — Build Instructions
 
+## Repository layout
 
+```
+Phase-Pong/
+├── core_cpp/            ← shared C++ source (all platforms read from here)
+│   ├── CMakeLists.txt
+│   └── src/
+│       └── main.cpp
+├── android/
+│   └── app/
+│       ├── CMakeLists.txt   ← NDK build; links to ../../core_cpp/src/main.cpp
+│       └── build.gradle
+├── .github/
+│   └── workflows/
+│       ├── ci-debug.yml           ← Linux + Android debug builds
+│       └── ci-release-deploy.yml  ← WASM build + GitHub Pages deploy
+└── docs/
+    └── BUILDING.md  ← you are here
+```
+
+---
 
 ## Prerequisites
 
-- **Android:** Android Studio, JDK 17, Android SDK, Android NDK (installed via SDK Manager).
+| Target | Tools needed |
+|--------|-------------|
+| **Desktop (Linux / Windows / macOS)** | CMake ≥ 3.11, GCC / Clang / MSVC, git |
+| **Android** | Android Studio, JDK 17, Android SDK + NDK (via SDK Manager) |
+| **WebAssembly** | [Emscripten SDK (emsdk)](https://emscripten.org/docs/getting_started/downloads.html) |
 
-- **Desktop (Windows/Linux):** CMake 3.11+, GCC/Clang/MSVC.
+raylib is fetched automatically by CMake via `FetchContent` — you do **not** need to install it manually.
 
-- **WebAssembly:** Emscripten SDK (emsdk).
+---
 
+## Desktop (Linux / macOS / Windows)
 
+```bash
+# From the repo root
+cmake -B build -DCMAKE_BUILD_TYPE=Release core_cpp
+cmake --build build --config Release -- -j$(nproc)
 
-## Compiling for Android (Native C++)
+# Run
+./build/PhasePong          # Linux / macOS
+build\Release\PhasePong.exe  # Windows
+```
 
-1. Navigate to the `android/` directory.
+For a **debug** build, replace `Release` with `Debug`.
 
-2. Execute `./gradlew assembleRelease` (Linux/macOS) or `gradlew.bat assembleRelease` (Windows).
+---
 
-3. The Gradle build will automatically trigger CMake to compile the NDK C++ core into `libphasepong.so`.
+## Android
 
-4. The signed APK will be generated in `android/app/build/outputs/apk/release/`.
+1. Open **Android Studio** and select *Open an existing project*.
+2. Navigate to the `android/` subdirectory and open it.
+3. Let Gradle sync finish (it will invoke CMake to compile the NDK layer).
+4. Connect a device or start an emulator, then run **▶ Run**.
 
+To build from the command line:
 
+```bash
+cd android
+./gradlew assembleRelease          # Linux / macOS
+gradlew.bat assembleRelease        # Windows
+```
 
-## Compiling for Desktop
+Signed APK: `android/app/build/outputs/apk/release/app-release-unsigned.apk`
 
-1. Navigate to the root directory.
+---
 
-2. Create a build directory: `mkdir build \&\& cd build`.
+## WebAssembly (manual)
 
-3. Generate build files: `cmake .. -DCMAKE\_BUILD\_TYPE=Release`.
+```bash
+# Activate emsdk first (once per shell session)
+source /path/to/emsdk/emsdk_env.sh
 
-4. Compile the project: `cmake --build .`.
+# From the repo root
+mkdir -p build_web && cd build_web
+emcmake cmake ../core_cpp -DCMAKE_BUILD_TYPE=Release -DPLATFORM=Web
+emmake make -j$(nproc)
 
-5. Run the output binary `PhasePong`.
+# Copy output so it can be served at the root URL
+cp PhasePong.html index.html
 
+# Serve locally
+python3 -m http.server 8080
+# then open http://localhost:8080
+```
 
+> **Note:** WASM files must be served over HTTP — opening `index.html` directly
+> from the filesystem will fail due to browser CORS/COOP restrictions.
 
-## Compiling for WebAssembly (GitHub Pages)
+---
 
-1. Ensure `emsdk` is activated in your terminal session.
+## WebAssembly (CI / GitHub Pages)
 
-2. Navigate to the root directory.
+Push to `master` or `dev` to trigger the `ci-release-deploy.yml` workflow.
+GitHub Actions will:
 
-3. Create a build directory: `mkdir build\_web \&\& cd build\_web`.
+1. Set up Emscripten via `mymindstorm/setup-emsdk`.
+2. Build the WASM bundle into `build_web/`.
+3. Copy `PhasePong.html → index.html` so the Pages root URL resolves.
+4. Deploy the `build_web/` directory to GitHub Pages.
 
-4. Generate build files: `emcmake cmake .. -DCMAKE\_BUILD\_TYPE=Release -DPLATFORM=Web`.
+The live URL will be printed in the workflow summary under **deploy-pages**.
 
-5. Compile: `emmake make`.
+---
 
-6. Host the resulting files locally (e.g., `python3 -m http.server`) or push to trigger the GitHub Actions deployment.
+## Common issues
 
+| Symptom | Fix |
+|---------|-----|
+| `CMake Error: The source does not appear to contain CMakeLists.txt` | You ran `cmake .` from the repo root. Point cmake at `core_cpp/` instead. |
+| Android build: `error: ../../src/main.cpp: No such file or directory` | Old `android/app/CMakeLists.txt` — the path was wrong. Pull the latest version. |
+| WASM build: GitHub Pages shows 404 | `PhasePong.html` was not renamed to `index.html`. The CI workflow now handles this automatically. |
+| raylib fetch fails / random upstream break | Upgrade to the pinned `GIT_TAG 5.5` in both `CMakeLists.txt` files. |
